@@ -2,8 +2,12 @@ name: IceHost Hourly KeepAlive
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # 🟢 开启自动触发：每 4 小时自动执行一次
-  workflow_dispatch:       # 🟢 保留手动触发：允许你在网页上随时点击运行
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   check-and-start:
@@ -39,3 +43,18 @@ jobs:
           name: icehost-debug-screenshot
           path: icehost_debug_screenshot.png
           if-no-files-found: ignore
+
+      - name: 🧹 清理旧的工作流运行记录
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
+          count=0
+          for run_id in $runs; do
+            count=$((count + 1))
+            if [ $count -gt 1 ]; then
+              echo "删除运行记录: $run_id"
+              gh run delete $run_id || true
+            fi
+          done
