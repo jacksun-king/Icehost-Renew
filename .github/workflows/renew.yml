@@ -49,12 +49,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
+          runs=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=100" \
+            | jq -r '.workflow_runs[].id')
           count=0
           for run_id in $runs; do
             count=$((count + 1))
             if [ $count -gt 1 ]; then
               echo "删除运行记录: $run_id"
-              gh run delete $run_id --confirmed || true
+              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id"
             fi
           done
