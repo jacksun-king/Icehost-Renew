@@ -40,6 +40,7 @@ jobs:
             exit 0
           fi
           LOCAL_MIXED="socks5://127.0.0.1:${LOCAL_PROXY_PORT}"
+          echo "ALL_PROXY=http://127.0.0.1:${LOCAL_PROXY_PORT}" >> $GITHUB_ENV
           echo "🌐 使用 mihomo 解析代理节点"
           MIHOMO_VER="v1.18.10"
           MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VER}/mihomo-linux-amd64-${MIHOMO_VER}.gz"
@@ -99,7 +100,6 @@ jobs:
           ICEHOST_COOKIES: ${{ secrets.ICEHOST_COOKIES }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          ALL_PROXY: http://127.0.0.1:1080
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             python icehost_run.py

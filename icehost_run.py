@@ -9,7 +9,21 @@ from seleniumbase import SB
 SERVER_URL = os.getenv("ICEHOST_SERVER_URL")
 ICEHOST_COOKIES = os.getenv("ICEHOST_COOKIES")
 # 代理配置（mihomo mixed-port，同时支持 http 和 socks5）
-PROXY = os.getenv("ALL_PROXY") or ""
+# 先测试代理是否可用，不可用则回退直连，避免 Chrome 连死代理导致页面加载失败
+_raw_proxy = os.getenv("ALL_PROXY") or ""
+PROXY = ""
+if _raw_proxy:
+    try:
+        _test = requests.get("https://api.ipify.org", proxies={"http": _raw_proxy, "https": _raw_proxy}, timeout=10)
+        if _test.status_code == 200:
+            PROXY = _raw_proxy
+            print(f"✅ 代理可用，出口 IP: {_test.text}")
+        else:
+            print(f"⚠️ 代理返回 {_test.status_code}，回退直连")
+    except Exception as _e:
+        print(f"⚠️ 代理 {_raw_proxy} 不可用（{_e}），回退直连")
+else:
+    print("ℹ️ 未配置 ALL_PROXY，直连模式")
 
 def send_tg_notification(message, photo_path=None):
     """发送结果和截图至 Telegram"""
@@ -149,12 +163,15 @@ def run():
             return
 
         # 6. 安全寻找并点击续期按钮
-        # 🟢 修复：同时兼容波兰语 "dodaj 6" 和 英语 "add 6"
-        renew_btn_selector = "//*[not(*) and (contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'dodaj 6') or contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6'))]"
+        # 🟢 修复：去掉 not(*) 限制（原条件排除有子元素的按钮如 <button><i>Add 6 hours</i></button>）
+        #    改用 button/a/div/input 元素匹配，兼容带图标子元素的按钮
+        renew_btn_selector = "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //div[@role='button' and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //input[contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')]"
         
         try:
             print("正在等待续期按钮加载...")
-            sb.wait_for_element_visible(renew_btn_selector, timeout=15)
+            print(f"📌 当前 URL: {sb.get_current_url()}")
+            print(f"📌 页面标题: {sb.get_title()}")
+            sb.wait_for_element_visible(renew_btn_selector, timeout=20)
             print("未检测到限制提示，找到续期按钮，正在点击...")
             sb.click(renew_btn_selector)
             
@@ -191,6 +208,13 @@ def run():
             # 🟢 修复：加上了 TG 推送，找不到按钮时能在 TG 收到报错截图
             error_msg = "❌ <b>IceHost 续期异常！</b>\n未找到续期按钮，可能是网页加载失败、被限制或按钮文本有变，请查看截图。"
             print(f"未在页面中找到可用的续期按钮: {e}")
+            # 打印当前 URL 和页面源码片段，方便诊断
+            try:
+                print(f"📌 异常时 URL: {sb.get_current_url()}")
+                _src = sb.get_page_source()[:2000]
+                print(f"📌 页面源码前2000字符:\n{_src}")
+            except:
+                pass
             send_tg_notification(error_msg, "icehost_debug_screenshot.png")
 
 if __name__ == "__main__":
