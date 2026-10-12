@@ -171,27 +171,65 @@ def run():
             print("正在等待续期按钮加载...")
             print(f"📌 当前 URL: {sb.get_current_url()}")
             print(f"📌 页面标题: {sb.get_title()}")
-            # 先打印页面可见文本，方便诊断按钮文字
+
+            # 🟢 修复：先在主文档找按钮，找不到就遍历 iframe 内部搜索
+            btn_found = False
+            
+            # 尝试 1: 主文档直接搜索
             try:
-                body_text = sb.get_text("body")
-                print(f"📌 页面可见文本（前1000字符）:\n{body_text[:1000]}")
-                # 搜索包含 add/6/validity/dodaj 的行
-                for line in body_text.splitlines():
-                    ll = line.lower().strip()
-                    if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
-                        print(f"  🔍 匹配行: {line.strip()[:200]}")
+                sb.wait_for_element_visible(renew_btn_selector, timeout=8)
+                print("✅ 在主文档找到续期按钮")
+                btn_found = True
             except:
-                pass
-            # 检查 iframe
-            try:
-                iframes = sb.find_elements("iframe")
-                if iframes:
+                print("主文档未找到按钮，检查 iframe...")
+            
+            # 尝试 2: 遍历 iframe 搜索
+            if not btn_found:
+                try:
+                    iframes = sb.find_elements("iframe")
                     print(f"📌 检测到 {len(iframes)} 个 iframe")
-            except:
-                pass
-            sb.wait_for_element_visible(renew_btn_selector, timeout=20)
+                    for i, ifr in enumerate(iframes):
+                        try:
+                            print(f"  → 切换到 iframe #{i}...")
+                            sb.switch_to_frame(ifr)
+                            sb.sleep(2)
+                            # 打印 iframe 内的文本
+                            try:
+                                ifr_text = sb.get_text("body")
+                                if ifr_text.strip():
+                                    print(f"  📌 iframe#{i} 文本（前500字符）: {ifr_text[:500]}")
+                                    for line in ifr_text.splitlines():
+                                        ll = line.lower().strip()
+                                        if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
+                                            print(f"  🔍 iframe匹配行: {line.strip()[:200]}")
+                            except:
+                                pass
+                            # 在 iframe 内搜索按钮
+                            try:
+                                sb.wait_for_element_visible(renew_btn_selector, timeout=10)
+                                print(f"  ✅ 在 iframe#{i} 内找到续期按钮！")
+                                btn_found = True
+                                break
+                            except:
+                                print(f"  iframe#{i} 内未找到按钮")
+                                sb.switch_to_default_content()
+                        except Exception as ie:
+                            print(f"  iframe#{i} 切换异常: {ie}")
+                            sb.switch_to_default_content()
+                except Exception as fe:
+                    print(f"iframe 遍历异常: {fe}")
+            
+            if not btn_found:
+                raise Exception("在主文档和所有 iframe 内均未找到续期按钮")
+            
             print("未检测到限制提示，找到续期按钮，正在点击...")
             sb.click(renew_btn_selector)
+            
+            # 点击后切回主文档
+            try:
+                sb.switch_to_default_content()
+            except:
+                pass
             
             # ⚡ 点击后，在不刷新页面的前提下，先等待 5 秒让可能弹出的红框提示充分渲染
             sb.sleep(5)
