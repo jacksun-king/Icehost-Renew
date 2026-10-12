@@ -171,6 +171,24 @@ def run():
             print("正在等待续期按钮加载...")
             print(f"📌 当前 URL: {sb.get_current_url()}")
             print(f"📌 页面标题: {sb.get_title()}")
+            # 先打印页面可见文本，方便诊断按钮文字
+            try:
+                body_text = sb.get_text("body")
+                print(f"📌 页面可见文本（前1000字符）:\n{body_text[:1000]}")
+                # 搜索包含 add/6/validity/dodaj 的行
+                for line in body_text.splitlines():
+                    ll = line.lower().strip()
+                    if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
+                        print(f"  🔍 匹配行: {line.strip()[:200]}")
+            except:
+                pass
+            # 检查 iframe
+            try:
+                iframes = sb.find_elements("iframe")
+                if iframes:
+                    print(f"📌 检测到 {len(iframes)} 个 iframe")
+            except:
+                pass
             sb.wait_for_element_visible(renew_btn_selector, timeout=20)
             print("未检测到限制提示，找到续期按钮，正在点击...")
             sb.click(renew_btn_selector)
@@ -208,11 +226,16 @@ def run():
             # 🟢 修复：加上了 TG 推送，找不到按钮时能在 TG 收到报错截图
             error_msg = "❌ <b>IceHost 续期异常！</b>\n未找到续期按钮，可能是网页加载失败、被限制或按钮文本有变，请查看截图。"
             print(f"未在页面中找到可用的续期按钮: {e}")
-            # 打印当前 URL 和页面源码片段，方便诊断
+            # 打印当前 URL 和页面文本，方便诊断
             try:
                 print(f"📌 异常时 URL: {sb.get_current_url()}")
-                _src = sb.get_page_source()[:2000]
-                print(f"📌 页面源码前2000字符:\n{_src}")
+                _body = sb.get_text("body")
+                print(f"📌 页面可见文本（前1000字符）:\n{_body[:1000]}")
+                # 搜索包含 add/6/validity/dodaj/renew 的行
+                for line in _body.splitlines():
+                    ll = line.lower().strip()
+                    if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
+                        print(f"  🔍 匹配行: {line.strip()[:200]}")
             except:
                 pass
             send_tg_notification(error_msg, "icehost_debug_screenshot.png")
