@@ -159,7 +159,9 @@ def run():
         is_limited = any(kw in page_source for kw in keywords)
 
         if is_limited:
-            print("检测到红框限制提示：说明未到可续期时间。结束本次运行（不发送 Telegram 提醒）。")
+            print("检测到红框限制提示：说明未到可续期时间。")
+            sb.save_screenshot("icehost_debug_screenshot.png")
+            send_tg_notification("ℹ️ <b>IceHost 未到续期时间</b>\n页面显示限制提示，等待下次自动续期。", "icehost_debug_screenshot.png")
             return
 
         # 6. 安全寻找并点击续期按钮
@@ -240,7 +242,9 @@ def run():
             is_failed_due_to_limit = any(kw in current_source for kw in keywords)
             
             if is_failed_due_to_limit:
-                print("点击后，页面立刻弹出了限制提示：说明未到可续期时间。结束本次运行。")
+                print("点击后，页面立刻弹出了限制提示：说明未到可续期时间。")
+                sb.save_screenshot("icehost_debug_screenshot.png")
+                send_tg_notification("ℹ️ <b>IceHost 未到续期时间</b>\n点击续期按钮后页面显示限制提示，等待下次自动续期。", "icehost_debug_screenshot.png")
                 return
             
             print("点击后未检测到报错红条，正在刷新页面确认续期结果...")
