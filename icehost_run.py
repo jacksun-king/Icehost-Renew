@@ -228,34 +228,20 @@ def run():
             sb.sleep(5)
             print(f"📌 刷新后 URL: {sb.get_current_url()}")
 
-            # 🟢 修复：先在主文档找按钮，找不到就遍历 iframe 内部搜索
+            # 🟢 直接用 Selenium 原生 XPath 查找（绕开 SeleniumBase 可能的定位器冲突）
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            
             btn_found = False
-
-            # 诊断：打印所有含 "add" 的按钮/链接元素 HTML
             try:
-                _src = sb.get_page_source()
-                import re as _re
-                # 搜索 HTML 中所有包含 "add" 的可点击元素
-                for match in _re.finditer(r'<(button|a|span|div)[^>]*>[^<]*add[^<]*</\1>', _src, _re.IGNORECASE):
-                    print(f"  🔎 HTML 匹配: {match.group(0)[:200]}")
-                # 搜索含 "add" 的 class 名
-                for match in _re.finditer(r'class="[^"]*add[^"]*"', _src, _re.IGNORECASE):
-                    print(f"  🔎 类名匹配: {match.group(0)[:200]}")
-                # 搜索所有 button 元素
-                btns = _re.findall(r'<button[^>]*>.*?</button>', _src, _re.DOTALL)
-                print(f"  🔎 共找到 {len(btns)} 个 button 元素")
-                for b in btns[:10]:
-                    print(f"     {b[:200]}")
-            except Exception as de:
-                print(f"  诊断异常: {de}")
-
-            # 尝试 1: 主文档直接搜索
-            try:
-                sb.wait_for_element_visible(renew_btn_selector, timeout=8)
-                print("✅ 在主文档找到续期按钮")
-                btn_found = True
+                elements = WebDriverWait(sb.driver, 15).until(
+                    lambda d: [e for e in d.find_elements(By.XPATH, renew_btn_selector) if e.is_displayed()]
+                )
+                if elements:
+                    print(f"✅ 找到续期按钮（原生 XPath），元素类型: {elements[0].tag_name}")
+                    btn_found = True
             except:
-                print("主文档未找到按钮，检查 iframe...")
+                print("原生 XPath 未找到可见按钮")
             
             # 尝试 2: 遍历 iframe 搜索
             if not btn_found:
@@ -297,7 +283,11 @@ def run():
                 raise Exception("在主文档和所有 iframe 内均未找到续期按钮")
             
             print("未检测到限制提示，找到续期按钮，正在点击...")
-            sb.click(renew_btn_selector)
+            elements = sb.driver.find_elements(By.XPATH, renew_btn_selector)
+            for el in elements:
+                if el.is_displayed():
+                    el.click()
+                    break
             
             # 点击后切回主文档
             try:
