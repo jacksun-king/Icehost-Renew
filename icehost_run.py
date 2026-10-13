@@ -232,7 +232,6 @@ def run():
             # 原 WebDriverWait + is_displayed 会消耗大量 WebDriver 往返调用，Chrome 容易崩（Connection refused）
             # JS 只用一次 execute_script，最省资源，也绕过 is_displayed=False 的问题
             print("🎯 直接 JS 强制点击续期按钮（不走 WebDriverWait）...")
-            from selenium.webdriver.common.exceptions import WebDriverException
             
             try:
                 js_result = sb.execute_script("""
@@ -279,9 +278,15 @@ def run():
                 except:
                     pass
                 
-            except WebDriverException as we:
-                print(f"⚠️ WebDriver 已崩: {we}")
-                raise Exception(f"WebDriver 崩溃无法点击续期按钮: {we}")
+            except Exception as we:
+                # WebDriver 崩了会抛 WebDriverException（是 Exception 子类）
+                we_str = str(we).lower()
+                is_wd_crash = any(k in we_str for k in ["connection refused", "connectionreset", "max retries", "sessionnotfound", "not a valid command"])
+                if is_wd_crash:
+                    print(f"⚠️ WebDriver 已崩: {we}")
+                    raise Exception(f"WebDriver 崩溃无法点击续期按钮: {we}")
+                else:
+                    raise
             
             # 点击后切回主文档
             try:
