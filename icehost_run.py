@@ -159,10 +159,55 @@ def run():
         is_limited = any(kw in page_source for kw in keywords)
 
         if is_limited:
-            print("检测到红框限制提示：说明未到可续期时间。")
+            print("检测到红框限制提示：说明未到续期时间。")
             sb.save_screenshot("icehost_debug_screenshot.png")
             send_tg_notification("ℹ️ <b>IceHost 未到续期时间</b>\n页面显示限制提示，等待下次自动续期。", "icehost_debug_screenshot.png")
             return
+
+        # 5.5 检测服务器是否处于关闭状态，如果是则先点击 Start 启动
+        #     匹配含 "start" 但不含 "restart" 的按钮（排除 Restart 按钮）
+        start_btn_selector = "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start') and not(contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'restart'))] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start') and not(contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'restart'))]"
+        
+        start_found = False
+        try:
+            # 主文档检测
+            if sb.is_element_visible(start_btn_selector):
+                start_found = True
+            if not start_found:
+                # 遍历 iframe 检测
+                try:
+                    iframes = sb.find_elements("iframe")
+                    for ifr in iframes:
+                        try:
+                            sb.switch_to_frame(ifr)
+                            if sb.is_element_visible(start_btn_selector):
+                                start_found = True
+                                break
+                        except:
+                            pass
+                        sb.switch_to_default_content()
+                except:
+                    pass
+            
+            if start_found:
+                print("🔴 检测到服务器处于关闭状态，正在点击 Start 启动...")
+                sb.save_screenshot("icehost_debug_screenshot.png")
+                sb.click(start_btn_selector)
+                sb.sleep(5)
+                print("✅ Start 已点击，等待服务器启动...")
+                sb.sleep(10)
+                sb.refresh()
+                sb.sleep(5)
+                sb.save_screenshot("icehost_debug_screenshot.png")
+                send_tg_notification("🔄 <b>IceHost 服务器已启动</b>\n检测到服务器处于关闭状态，已自动点击 Start 启动。", "icehost_debug_screenshot.png")
+            else:
+                print("✅ 服务器已处于运行状态，无需启动")
+        except Exception as e:
+            print(f"服务器状态检测/启动异常（非致命）: {e}")
+            try:
+                sb.switch_to_default_content()
+            except:
+                pass
 
         # 6. 安全寻找并点击续期按钮
         # 🟢 修复：去掉 not(*) 限制（原条件排除有子元素的按钮如 <button><i>Add 6 hours</i></button>）
