@@ -221,6 +221,12 @@ def run():
             print("正在等待续期按钮加载...")
             print(f"📌 当前 URL: {sb.get_current_url()}")
             print(f"📌 页面标题: {sb.get_title()}")
+            
+            # 额外等待 + 刷新确保 JS 渲染完成
+            sb.sleep(5)
+            sb.refresh()
+            sb.sleep(5)
+            print(f"📌 刷新后 URL: {sb.get_current_url()}")
 
             # 🟢 修复：先在主文档找按钮，找不到就遍历 iframe 内部搜索
             btn_found = False
