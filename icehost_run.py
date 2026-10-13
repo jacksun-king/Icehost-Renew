@@ -319,12 +319,12 @@ def run():
             try:
                 print(f"📌 异常时 URL: {sb.get_current_url()}")
                 _body = sb.get_text("body")
-                print(f"📌 页面可见文本（前1000字符）:\n{_body[:1000]}")
-                # 搜索包含 add/6/validity/dodaj/renew 的行
+                print(f"📌 页面可见文本（前5000字符）:\n{_body[:5000]}")
+                # 搜索包含 add/6/validity/dodaj/renew/godzin/extension 的行
                 for line in _body.splitlines():
                     ll = line.lower().strip()
-                    if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
-                        print(f"  🔍 匹配行: {line.strip()[:200]}")
+                    if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu", "extension", "extend", "expired", "expire"]):
+                        print(f"  🔍 匹配行: {line.strip()[:300]}")
             except:
                 pass
             send_tg_notification(error_msg, "icehost_debug_screenshot.png")
