@@ -230,7 +230,25 @@ def run():
 
             # 🟢 修复：先在主文档找按钮，找不到就遍历 iframe 内部搜索
             btn_found = False
-            
+
+            # 诊断：打印所有含 "add" 的按钮/链接元素 HTML
+            try:
+                _src = sb.get_page_source()
+                import re as _re
+                # 搜索 HTML 中所有包含 "add" 的可点击元素
+                for match in _re.finditer(r'<(button|a|span|div)[^>]*>[^<]*add[^<]*</\1>', _src, _re.IGNORECASE):
+                    print(f"  🔎 HTML 匹配: {match.group(0)[:200]}")
+                # 搜索含 "add" 的 class 名
+                for match in _re.finditer(r'class="[^"]*add[^"]*"', _src, _re.IGNORECASE):
+                    print(f"  🔎 类名匹配: {match.group(0)[:200]}")
+                # 搜索所有 button 元素
+                btns = _re.findall(r'<button[^>]*>.*?</button>', _src, _re.DOTALL)
+                print(f"  🔎 共找到 {len(btns)} 个 button 元素")
+                for b in btns[:10]:
+                    print(f"     {b[:200]}")
+            except Exception as de:
+                print(f"  诊断异常: {de}")
+
             # 尝试 1: 主文档直接搜索
             try:
                 sb.wait_for_element_visible(renew_btn_selector, timeout=8)
