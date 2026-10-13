@@ -196,9 +196,10 @@ def run():
                 sb.sleep(5)
                 print("✅ Start 已点击，等待服务器启动...")
                 sb.sleep(10)
-                # 导航回服务器详情页，避免停留在 /startup 等子页面
-                print(f"🔄 导航回服务器详情页: {SERVER_URL}")
-                sb.open(SERVER_URL)
+                # 🟢 修复：用 refresh 替代 open(SERVER_URL)，避免重新触发 Cloudflare Turnstile
+                # 原因：uc_open/open 会重新加载整个页面，可能再次被 Cloudflare 拦
+                print("🔄 刷新页面确认服务器状态...")
+                sb.refresh()
                 sb.sleep(5)
                 sb.save_screenshot("icehost_debug_screenshot.png")
                 send_tg_notification("🔄 <b>IceHost 服务器已启动</b>\n检测到服务器处于关闭状态，已自动点击 Start 启动。", "icehost_debug_screenshot.png")
@@ -228,75 +229,65 @@ def run():
             sb.sleep(5)
             print(f"📌 刷新后 URL: {sb.get_current_url()}")
 
-            # 🟢 修复：直接 JS 强制点击（跳过 WebDriverWait 循环和 iframe 遍历，避免 WebDriver 崩）
-            # 原 WebDriverWait + is_displayed 会消耗大量 WebDriver 往返调用，Chrome 容易崩（Connection refused）
-            # JS 只用一次 execute_script，最省资源，也绕过 is_displayed=False 的问题
-            print("🎯 直接 JS 强制点击续期按钮（不走 WebDriverWait）...")
+            # 🟢 修复：用 SeleniumBase 内置 click 方法，绕过 is_displayed=False 问题
+            # 原因：Pterodactyl SPA 的按钮 is_displayed() 返回 False，但 DOM 存在
+            # 方案：sb.click("text=...") 内部用多种策略找元素，不检查 visibility
+            print("🎯 用 SeleniumBase click 尝试点击续期按钮...")
             
-            try:
-                # 先做 JS 探活测试
-                _probe = sb.execute_script("return document.title;")
-                print(f"📌 JS 探活: title='{_probe}'")
-            except Exception as probe_e:
-                print(f"⚠️ JS 探活失败: {type(probe_e).__name__}: {repr(probe_e)}")
-                raise Exception(f"JS 无法执行: {probe_e}")
+            click_success = False
+            click_methods = [
+                ("text=Add 6 hours validity", "text=Add 6 hours validity"),
+                ("xpath=//button[contains(text(),'Add 6')]", "xpath=//button[contains(text(),'Add 6')]"),
+                ("xpath=//button[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'add 6')]", "xpath=//button[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'add 6')]"),
+                ("css=button", "css=button"),  # 兜底：找第一个 button
+            ]
             
-            try:
-                js_result = sb.execute_script("""
-                    const xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6') and not(self::script) and not(self::style) and not(self::head) and not(self::title)]";
-                    const btns = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                    const info = [];
-                    for (let i = 0; i < btns.snapshotLength; i++) {
-                        const el = btns.snapshotItem(i);
-                        const cls = (el.className||'').toString().substring(0,50);
-                        const vis = el.offsetParent !== null;
-                        info.push(el.tagName + '#' + cls + ':vis=' + vis);
-                    }
-                    // 优先点 BUTTON/A/INPUT 元素
-                    for (let i = 0; i < btns.snapshotLength; i++) {
-                        const el = btns.snapshotItem(i);
-                        const tag = el.tagName.toUpperCase();
-                        if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT') {
-                            try {
-                                el.scrollIntoView({block:'center'});
-                                el.click();
-                                return 'CLICKED-' + tag + '::' + info.join('|');
-                            } catch(e) { info.push('err:' + e.message); }
-                        }
-                    }
-                    // 无合适 tag，点最后一个（父容器）
-                    if (btns.snapshotLength > 0) {
-                        const last = btns.snapshotItem(btns.snapshotLength-1);
-                        try {
-                            last.scrollIntoView({block:'center'});
-                            last.click();
-                            return 'CLICKED-CONTAINER-' + last.tagName + '::' + info.join('|');
-                        } catch(e) { info.push('err2:' + e.message); }
-                    }
-                    return 'NO-ELEMENT::' + info.join('|');
-                """)
-                print(f"JS 点击结果: {js_result}")
-                
-                if js_result.startswith('NO-ELEMENT'):
-                    raise Exception(f"页面中未找到 Add 6 hours 按钮: {js_result}")
-                
-                # 点击后切回主文档
+            for desc, selector in click_methods:
                 try:
-                    sb.switch_to_default_content()
-                except:
-                    pass
-                
-            except Exception as we:
-                # WebDriver 崩了会抛 WebDriverException（是 Exception 子类）
-                we_str = str(we).lower()
-                is_wd_crash = any(k in we_str for k in ["connection refused", "connectionreset", "max retries", "sessionnotfound", "not a valid command"])
-                if is_wd_crash:
-                    print(f"⚠️ WebDriver 已崩: {we}")
-                    raise Exception(f"WebDriver 崩溃无法点击续期按钮: {we}")
-                else:
-                    # 打印完整异常信息，方便调试
-                    print(f"⚠️ JS 执行异常: type={type(we).__name__} msg='{we}' repr={repr(we)}")
-                    raise
+                    print(f"  尝试: {desc}")
+                    sb.click(selector, timeout=10)
+                    print(f"  ✅ 点击成功: {desc}")
+                    click_success = True
+                    break
+                except Exception as e:
+                    print(f"  ❌ 失败: {type(e).__name__}: {str(e)[:100]}")
+                    continue
+            
+            # 所有方法都失败，最后用 JS 强制点击
+            if not click_success:
+                print("⚠️ 所有 selector 失败，尝试 JS 强制点击...")
+                try:
+                    js_result = sb.execute_script("""
+                        var btns = document.querySelectorAll('button, a, input');
+                        var found = null;
+                        for (var i = 0; i < btns.length; i++) {
+                            var t = btns[i].textContent ? btns[i].textContent.trim() : btns[i].value;
+                            if (t && t.toLowerCase().indexOf('add 6') !== -1) {
+                                found = btns[i];
+                                break;
+                            }
+                        }
+                        if (found) {
+                            found.scrollIntoView({block:'center'});
+                            found.click();
+                            return 'CLICKED:' + found.tagName + ':' + (found.textContent||'').substring(0,50);
+                        }
+                        return 'NOT-FOUND';
+                    """)
+                    print(f"JS 结果: {js_result}")
+                    if js_result and js_result.startswith('CLICKED'):
+                        click_success = True
+                except Exception as js_e:
+                    print(f"⚠️ JS 也失败: {type(js_e).__name__}: {repr(js_e)[:200]}")
+            
+            if not click_success:
+                raise Exception("所有点击方法都失败，未找到续期按钮")
+            
+            # 点击后切回主文档
+            try:
+                sb.switch_to_default_content()
+            except:
+                pass
             
             # 点击后切回主文档
             try:
