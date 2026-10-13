@@ -234,6 +234,14 @@ def run():
             print("🎯 直接 JS 强制点击续期按钮（不走 WebDriverWait）...")
             
             try:
+                # 先做 JS 探活测试
+                _probe = sb.execute_script("return document.title;")
+                print(f"📌 JS 探活: title='{_probe}'")
+            except Exception as probe_e:
+                print(f"⚠️ JS 探活失败: {type(probe_e).__name__}: {repr(probe_e)}")
+                raise Exception(f"JS 无法执行: {probe_e}")
+            
+            try:
                 js_result = sb.execute_script("""
                     const xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6') and not(self::script) and not(self::style) and not(self::head) and not(self::title)]";
                     const btns = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
@@ -286,6 +294,8 @@ def run():
                     print(f"⚠️ WebDriver 已崩: {we}")
                     raise Exception(f"WebDriver 崩溃无法点击续期按钮: {we}")
                 else:
+                    # 打印完整异常信息，方便调试
+                    print(f"⚠️ JS 执行异常: type={type(we).__name__} msg='{we}' repr={repr(we)}")
                     raise
             
             # 点击后切回主文档
