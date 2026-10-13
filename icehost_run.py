@@ -228,98 +228,60 @@ def run():
             sb.sleep(5)
             print(f"📌 刷新后 URL: {sb.get_current_url()}")
 
-            # 🟢 直接用 Selenium 原生 XPath 查找（绕开 SeleniumBase 可能的定位器冲突）
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
+            # 🟢 修复：直接 JS 强制点击（跳过 WebDriverWait 循环和 iframe 遍历，避免 WebDriver 崩）
+            # 原 WebDriverWait + is_displayed 会消耗大量 WebDriver 往返调用，Chrome 容易崩（Connection refused）
+            # JS 只用一次 execute_script，最省资源，也绕过 is_displayed=False 的问题
+            print("🎯 直接 JS 强制点击续期按钮（不走 WebDriverWait）...")
+            from selenium.webdriver.common.exceptions import WebDriverException
             
-            btn_found = False
             try:
-                elements = WebDriverWait(sb.driver, 15).until(
-                    lambda d: [e for e in d.find_elements(By.XPATH, renew_btn_selector) if e.is_displayed()]
-                )
-                if elements:
-                    print(f"✅ 找到续期按钮（原生 XPath），元素类型: {elements[0].tag_name}")
-                    btn_found = True
-            except:
-                print("原生 XPath 未找到可见按钮")
-            
-            # 尝试 2: 遍历 iframe 搜索
-            if not btn_found:
-                try:
-                    iframes = sb.find_elements("iframe")
-                    print(f"📌 检测到 {len(iframes)} 个 iframe")
-                    for i, ifr in enumerate(iframes):
-                        try:
-                            print(f"  → 切换到 iframe #{i}...")
-                            sb.switch_to_frame(ifr)
-                            sb.sleep(2)
-                            # 打印 iframe 内的文本
-                            try:
-                                ifr_text = sb.get_text("body")
-                                if ifr_text.strip():
-                                    print(f"  📌 iframe#{i} 文本（前500字符）: {ifr_text[:500]}")
-                                    for line in ifr_text.splitlines():
-                                        ll = line.lower().strip()
-                                        if any(k in ll for k in ["add", "6 hour", "validity", "dodaj", "godzin", "renew", "przedłu"]):
-                                            print(f"  🔍 iframe匹配行: {line.strip()[:200]}")
-                            except:
-                                pass
-                            # 在 iframe 内搜索按钮
-                            try:
-                                sb.wait_for_element_visible(renew_btn_selector, timeout=10)
-                                print(f"  ✅ 在 iframe#{i} 内找到续期按钮！")
-                                btn_found = True
-                                break
-                            except:
-                                print(f"  iframe#{i} 内未找到按钮")
-                                sb.switch_to_default_content()
-                        except Exception as ie:
-                            print(f"  iframe#{i} 切换异常: {ie}")
-                            sb.switch_to_default_content()
-                except Exception as fe:
-                    print(f"iframe 遍历异常: {fe}")
-            
-            # 🟢 修复：先找可见按钮，找不到就用 JS 强制点击（即使 is_displayed=False）
-            elements = sb.driver.find_elements(By.XPATH, renew_btn_selector)
-            elements_visible = [e for e in elements if e.is_displayed()]
-            
-            if elements_visible:
-                print(f"✅ 找到 {len(elements_visible)} 个可见按钮，点击第一个...")
-                elements_visible[0].click()
-            else:
-                print(f"⚠️ 无可见按钮，DOM 中共 {len(elements)} 个匹配，尝试 JS 强制点击...")
                 js_result = sb.execute_script("""
                     const xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6') and not(self::script) and not(self::style) and not(self::head) and not(self::title)]";
                     const btns = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                    const logs = [];
+                    const info = [];
+                    for (let i = 0; i < btns.snapshotLength; i++) {
+                        const el = btns.snapshotItem(i);
+                        const cls = (el.className||'').toString().substring(0,50);
+                        const vis = el.offsetParent !== null;
+                        info.push(el.tagName + '#' + cls + ':vis=' + vis);
+                    }
                     // 优先点 BUTTON/A/INPUT 元素
                     for (let i = 0; i < btns.snapshotLength; i++) {
                         const el = btns.snapshotItem(i);
                         const tag = el.tagName.toUpperCase();
-                        const cls = (el.className||'').toString().substring(0,60);
-                        logs.push(tag + '#' + cls);
                         if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT') {
                             try {
                                 el.scrollIntoView({block:'center'});
                                 el.click();
-                                return 'clicked-' + tag + ':' + cls;
-                            } catch(e) { logs.push('js-click-err:' + e.message); }
+                                return 'CLICKED-' + tag + '::' + info.join('|');
+                            } catch(e) { info.push('err:' + e.message); }
                         }
                     }
-                    // 无合适 tag，点击最后一个（可能是父容器）
+                    // 无合适 tag，点最后一个（父容器）
                     if (btns.snapshotLength > 0) {
                         const last = btns.snapshotItem(btns.snapshotLength-1);
                         try {
                             last.scrollIntoView({block:'center'});
                             last.click();
-                            return 'clicked-container-' + last.tagName;
-                        } catch(e) { logs.push('js-click-last-err:' + e.message); }
+                            return 'CLICKED-CONTAINER-' + last.tagName + '::' + info.join('|');
+                        } catch(e) { info.push('err2:' + e.message); }
                     }
-                    return 'no-element:' + logs.join('|');
+                    return 'NO-ELEMENT::' + info.join('|');
                 """)
-                print(f"JS 强制点击结果: {js_result}")
-                if 'no-element' in str(js_result):
-                    raise Exception(f"JS 强制点击也失败: {js_result}")
+                print(f"JS 点击结果: {js_result}")
+                
+                if js_result.startswith('NO-ELEMENT'):
+                    raise Exception(f"页面中未找到 Add 6 hours 按钮: {js_result}")
+                
+                # 点击后切回主文档
+                try:
+                    sb.switch_to_default_content()
+                except:
+                    pass
+                
+            except WebDriverException as we:
+                print(f"⚠️ WebDriver 已崩: {we}")
+                raise Exception(f"WebDriver 崩溃无法点击续期按钮: {we}")
             
             # 点击后切回主文档
             try:
