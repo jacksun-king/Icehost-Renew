@@ -279,15 +279,47 @@ def run():
                 except Exception as fe:
                     print(f"iframe 遍历异常: {fe}")
             
-            if not btn_found:
-                raise Exception("在主文档和所有 iframe 内均未找到续期按钮")
-            
-            print("未检测到限制提示，找到续期按钮，正在点击...")
+            # 🟢 修复：先找可见按钮，找不到就用 JS 强制点击（即使 is_displayed=False）
             elements = sb.driver.find_elements(By.XPATH, renew_btn_selector)
-            for el in elements:
-                if el.is_displayed():
-                    el.click()
-                    break
+            elements_visible = [e for e in elements if e.is_displayed()]
+            
+            if elements_visible:
+                print(f"✅ 找到 {len(elements_visible)} 个可见按钮，点击第一个...")
+                elements_visible[0].click()
+            else:
+                print(f"⚠️ 无可见按钮，DOM 中共 {len(elements)} 个匹配，尝试 JS 强制点击...")
+                js_result = sb.execute_script("""
+                    const xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6') and not(self::script) and not(self::style) and not(self::head) and not(self::title)]";
+                    const btns = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const logs = [];
+                    // 优先点 BUTTON/A/INPUT 元素
+                    for (let i = 0; i < btns.snapshotLength; i++) {
+                        const el = btns.snapshotItem(i);
+                        const tag = el.tagName.toUpperCase();
+                        const cls = (el.className||'').toString().substring(0,60);
+                        logs.push(tag + '#' + cls);
+                        if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT') {
+                            try {
+                                el.scrollIntoView({block:'center'});
+                                el.click();
+                                return 'clicked-' + tag + ':' + cls;
+                            } catch(e) { logs.push('js-click-err:' + e.message); }
+                        }
+                    }
+                    // 无合适 tag，点击最后一个（可能是父容器）
+                    if (btns.snapshotLength > 0) {
+                        const last = btns.snapshotItem(btns.snapshotLength-1);
+                        try {
+                            last.scrollIntoView({block:'center'});
+                            last.click();
+                            return 'clicked-container-' + last.tagName;
+                        } catch(e) { logs.push('js-click-last-err:' + e.message); }
+                    }
+                    return 'no-element:' + logs.join('|');
+                """)
+                print(f"JS 强制点击结果: {js_result}")
+                if 'no-element' in str(js_result):
+                    raise Exception(f"JS 强制点击也失败: {js_result}")
             
             # 点击后切回主文档
             try:
