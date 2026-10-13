@@ -214,7 +214,8 @@ def run():
         # 6. 安全寻找并点击续期按钮
         # 🟢 修复：去掉 not(*) 限制（原条件排除有子元素的按钮如 <button><i>Add 6 hours</i></button>）
         #    改用 button/a/div/input 元素匹配，兼容带图标子元素的按钮
-        renew_btn_selector = "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //div[@role='button' and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')] | //input[contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6')]"
+        # 🟢 放宽：匹配所有包含 "add 6" 文本的可见元素（不限于 button/a）
+        renew_btn_selector = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'add 6') and not(self::script) and not(self::style) and not(self::head) and not(self::title)]"
         
         try:
             print("正在等待续期按钮加载...")
