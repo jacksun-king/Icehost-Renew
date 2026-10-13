@@ -165,8 +165,8 @@ def run():
             return
 
         # 5.5 检测服务器是否处于关闭状态，如果是则先点击 Start 启动
-        #     匹配含 "start" 但不含 "restart" 的按钮（排除 Restart 按钮）
-        start_btn_selector = "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start') and not(contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'restart'))] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start') and not(contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'restart'))]"
+        #     精确匹配文本为 "start" 的按钮（排除 "Startup" 导航链接等）
+        start_btn_selector = "//button[normalize-space(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='start'] | //a[normalize-space(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'))='start']"
         
         start_found = False
         try:
@@ -196,7 +196,9 @@ def run():
                 sb.sleep(5)
                 print("✅ Start 已点击，等待服务器启动...")
                 sb.sleep(10)
-                sb.refresh()
+                # 导航回服务器详情页，避免停留在 /startup 等子页面
+                print(f"🔄 导航回服务器详情页: {SERVER_URL}")
+                sb.open(SERVER_URL)
                 sb.sleep(5)
                 sb.save_screenshot("icehost_debug_screenshot.png")
                 send_tg_notification("🔄 <b>IceHost 服务器已启动</b>\n检测到服务器处于关闭状态，已自动点击 Start 启动。", "icehost_debug_screenshot.png")
