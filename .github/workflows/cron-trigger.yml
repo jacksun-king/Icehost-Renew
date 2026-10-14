@@ -1,0 +1,37 @@
+name: IceHost Cron Trigger
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # 每 10 分钟检查一次
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  trigger-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check time and trigger main workflow
+        run: |
+          # 获取当前 UTC 小时
+          HOUR=$(date -u +%H)
+          MINUTE=$(date -u +%M)
+          
+          # 检查是否是每 4 小时的 0 分（0, 4, 8, 12, 16, 20）
+          if [ "$MINUTE" = "0" ]; then
+            if [ "$HOUR" -ge 0 ] && [ "$((HOUR % 4))" = "0" ]; then
+              echo "✅ Time to trigger main workflow ($HOUR:00 UTC)"
+              
+              # 触发主 workflow
+              curl -s -X POST \
+                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/json" \
+                -d '{"ref":"main"}' \
+                https://api.github.com/repos/jacksun-king/Icehost-Renew/actions/workflows/renew.yml/dispatches
+              
+              echo "Triggered!"
+            fi
+          fi
